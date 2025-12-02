@@ -119,9 +119,17 @@ export function SurveyForm() {
   })
 
   const handleAddRegion = () => {
-    if (!selectedCity || !selectedDistrict || !selectedNeighborhood || !selectedOption) return
+    if (!selectedOption) return
 
-    const regionString = `${selectedCity} ${selectedDistrict} ${selectedNeighborhood}`
+    let regionString = ""
+
+    if (isManualMode) {
+      if (!manualCity || !manualDistrict) return
+      regionString = `${manualCity} ${manualDistrict} ${manualNeighborhood}`.trim()
+    } else {
+      if (!selectedCity || !selectedDistrict || !selectedNeighborhood) return
+      regionString = `${selectedCity} ${selectedDistrict} ${selectedNeighborhood}`
+    }
 
     // 중복 체크
     if (selectedRegions.includes(regionString) || existingRegions.includes(regionString)) {
@@ -450,7 +458,7 @@ export function SurveyForm() {
               </div>
               <Button
                 onClick={handleAddRegion}
-                disabled={totalRemainingSlots <= 0}
+                disabled={totalRemainingSlots <= 0 || !manualCity || !manualDistrict}
                 className="bg-gray-900 hover:bg-gray-800 text-white"
               >
                 <Plus className="w-4 h-4 mr-2" />
