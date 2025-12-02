@@ -7,6 +7,8 @@ import {
   getAllServerRegions,
   deleteSurveysByRegions,
   getOptionStats,
+  deleteSurveyById,
+  updateSurveyRegions,
   type SurveyResponse,
   type ServerRegionInfo,
 } from "@/lib/actions/survey"
@@ -21,6 +23,8 @@ import {
   Clock,
   Trash2,
   PieChart,
+  Pencil,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -40,6 +44,11 @@ export function SurveyResults() {
   const [sortOrder, setSortOrder] = useState<"name" | "date">("date")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
   const [deleting, setDeleting] = useState(false)
+
+  // 개별 응답 수정/삭제 관련 state
+  const [editingSurvey, setEditingSurvey] = useState<SurveyResponse | null>(null)
+  const [editingRegions, setEditingRegions] = useState<string[]>([])
+  const [isUpdating, setIsUpdating] = useState(false)
 
   const fetchData = async () => {
     setLoading(true)
@@ -178,6 +187,73 @@ export function SurveyResults() {
       alert("삭제 중 오류가 발생했습니다.")
     } finally {
       setDeleting(false)
+    }
+  }
+
+  // 개별 응답 삭제
+  const handleDeleteSurvey = async (survey: SurveyResponse) => {
+    const confirmed = window.confirm(
+      `${survey.user_name}(${survey.cohort})님의 응답을 삭제하시겠습니까?\n\n선택 지역:\n${survey.selected_regions.slice(0, 3).join("\n")}${survey.selected_regions.length > 3 ? `\n... 외 ${survey.selected_regions.length - 3}개` : ""}`,
+    )
+
+    if (!confirmed) return
+
+    setIsUpdating(true)
+    try {
+      const result = await deleteSurveyById(survey.id)
+      if (result.success) {
+        await fetchData()
+      } else {
+        alert(`삭제 중 오류가 발생했습니다: ${result.error}`)
+      }
+    } catch (error) {
+      alert("삭제 중 오류가 발생했습니다.")
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  // 수정 모달 열기
+  const openEditModal = (survey: SurveyResponse) => {
+    setEditingSurvey(survey)
+    setEditingRegions([...survey.selected_regions])
+  }
+
+  // 수정 모달 닫기
+  const closeEditModal = () => {
+    setEditingSurvey(null)
+    setEditingRegions([])
+  }
+
+  // 수정에서 지역 삭제
+  const removeEditingRegion = (region: string) => {
+    setEditingRegions(editingRegions.filter((r) => r !== region))
+  }
+
+  // 수정 저장
+  const handleSaveEdit = async () => {
+    if (!editingSurvey) return
+
+    if (editingRegions.length === 0) {
+      const confirmed = window.confirm(
+        "모든 지역이 삭제되었습니다. 이 응답 자체를 삭제하시겠습니까?",
+      )
+      if (!confirmed) return
+    }
+
+    setIsUpdating(true)
+    try {
+      const result = await updateSurveyRegions(editingSurvey.id, editingRegions)
+      if (result.success) {
+        closeEditModal()
+        await fetchData()
+      } else {
+        alert(`수정 중 오류가 발생했습니다: ${result.error}`)
+      }
+    } catch (error) {
+      alert("수정 중 오류가 발생했습니다.")
+    } finally {
+      setIsUpdating(false)
     }
   }
 
@@ -459,6 +535,7 @@ export function SurveyResults() {
                       <ArrowUpDown className={`w-4 h-4 ${sortOrder === "date" ? "text-gray-900" : "text-gray-400"}`} />
                     </div>
                   </TableHead>
+                  <TableHead className="text-gray-600 text-center">관리</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -509,6 +586,30 @@ export function SurveyResults() {
                     <TableCell className="text-gray-500 text-sm">
                       {new Date(survey.created_at).toLocaleString("ko-KR")}
                     </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1 justify-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600"
+                          onClick={() => openEditModal(survey)}
+                          disabled={isUpdating}
+                          title="수정"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600"
+                          onClick={() => handleDeleteSurvey(survey)}
+                          disabled={isUpdating}
+                          title="삭제"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -516,6 +617,82 @@ export function SurveyResults() {
           </div>
         )}
       </div>
+
+      {/* 수정 모달 */}
+      {editingSurvey && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">응답 수정</h3>
+                <p className="text-sm text-gray-500">
+                  {editingSurvey.user_name} ({editingSurvey.cohort})
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={closeEditModal}
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+
+            <div className="p-4 overflow-y-auto max-h-[50vh]">
+              <p className="text-sm text-gray-600 mb-3">
+                삭제할 지역의 X 버튼을 클릭하세요. ({editingRegions.length}개 선택됨)
+              </p>
+              {editingRegions.length === 0 ? (
+                <p className="text-center text-gray-400 py-8">
+                  모든 지역이 삭제되었습니다.
+                  <br />
+                  저장하면 이 응답이 삭제됩니다.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {editingRegions.map((region) => {
+                    const isInServer = isServerRegion(region)
+                    return (
+                      <div
+                        key={region}
+                        className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-sm ${
+                          isInServer
+                            ? "bg-green-100 text-green-700 border border-green-200"
+                            : "bg-gray-100 text-gray-700 border border-gray-200"
+                        }`}
+                      >
+                        {isInServer && <Database className="w-3 h-3" />}
+                        <span>{region}</span>
+                        <button
+                          onClick={() => removeEditingRegion(region)}
+                          className="ml-1 hover:text-red-600 transition-colors"
+                          title="이 지역 삭제"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 p-4 border-t border-gray-200 bg-gray-50">
+              <Button variant="outline" onClick={closeEditModal} disabled={isUpdating}>
+                취소
+              </Button>
+              <Button
+                onClick={handleSaveEdit}
+                disabled={isUpdating}
+                className="bg-gray-900 hover:bg-gray-800 text-white"
+              >
+                {isUpdating ? "저장 중..." : "저장"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -294,3 +294,47 @@ export async function getOptionStats(): Promise<{
 
   return stats
 }
+
+export async function deleteSurveyById(
+  id: string,
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await getSupabaseServerClient()
+
+  const { error } = await supabase
+    .from("region_demand_surveys")
+    .delete()
+    .eq("id", id)
+
+  if (error) {
+    console.error("Delete survey by id error:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/admin")
+  return { success: true }
+}
+
+export async function updateSurveyRegions(
+  id: string,
+  newRegions: string[],
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await getSupabaseServerClient()
+
+  if (newRegions.length === 0) {
+    // 지역이 모두 삭제되면 응답 자체를 삭제
+    return deleteSurveyById(id)
+  }
+
+  const { error } = await supabase
+    .from("region_demand_surveys")
+    .update({ selected_regions: newRegions })
+    .eq("id", id)
+
+  if (error) {
+    console.error("Update survey regions error:", error)
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/admin")
+  return { success: true }
+}
