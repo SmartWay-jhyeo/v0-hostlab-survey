@@ -67,6 +67,20 @@ export function SurveyResults() {
     fetchData()
   }, [])
 
+  // 중복 제거된 사용자 목록 생성 (이름+기수 기준)
+  const uniqueUsersMap = new Map<string, SurveyResponse>()
+  surveys.forEach((survey) => {
+    const key = `${survey.user_name}-${survey.cohort}`
+    // 최신 응답이 우선하도록 (날짜 정렬이 되어있다고 가정하거나, 날짜 비교)
+    if (
+      !uniqueUsersMap.has(key) ||
+      new Date(survey.created_at) > new Date(uniqueUsersMap.get(key)!.created_at)
+    ) {
+      uniqueUsersMap.set(key, survey)
+    }
+  })
+  const uniqueSurveys = Array.from(uniqueUsersMap.values())
+
   const serverRegionMap = new Map<string, ServerRegionInfo>()
   serverRegions.forEach((region) => {
     const key = `${region.city_name} ${region.district_name} ${region.neighborhood_name}`
@@ -77,10 +91,20 @@ export function SurveyResults() {
   const getRegionInfo = (region: string) => serverRegionMap.get(region)
 
   const regionCounts: Record<string, number> = {}
-  surveys.forEach((survey) => {
+  // 중복 제거된 설문 기준으로 지역 카운트 집계
+  uniqueSurveys.forEach((survey) => {
     survey.selected_regions.forEach((region) => {
       regionCounts[region] = (regionCounts[region] || 0) + 1
     })
+  })
+
+  // 옵션 통계도 중복 제거된 데이터 기준으로 재계산
+  const currentOptionStats = { option1: 0, option2: 0, option3: 0, unknown: 0 }
+  uniqueSurveys.forEach((s) => {
+    if (s.option_type === 1) currentOptionStats.option1++
+    else if (s.option_type === 2) currentOptionStats.option2++
+    else if (s.option_type === 3) currentOptionStats.option3++
+    else currentOptionStats.unknown++
   })
 
   const sortedRegions = Object.entries(regionCounts)
@@ -300,7 +324,7 @@ export function SurveyResults() {
             </div>
             <div>
               <p className="text-sm text-gray-500">총 참여자</p>
-              <p className="text-2xl font-bold text-gray-900">{surveys.length}명</p>
+              <p className="text-2xl font-bold text-gray-900">{uniqueSurveys.length}명</p>
             </div>
           </div>
         </div>
@@ -323,7 +347,7 @@ export function SurveyResults() {
             <div>
               <p className="text-sm text-gray-500">총 투표 수</p>
               <p className="text-2xl font-bold text-gray-900">
-                {surveys.reduce((acc, s) => acc + s.selected_regions.length, 0)}개
+                {uniqueSurveys.reduce((acc, s) => acc + s.selected_regions.length, 0)}개
               </p>
             </div>
           </div>
@@ -338,22 +362,22 @@ export function SurveyResults() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
             <p className="text-sm text-blue-600 mb-1">옵션 1</p>
-            <p className="text-xl font-bold text-blue-900">{optionStats.option1}명</p>
+            <p className="text-xl font-bold text-blue-900">{currentOptionStats.option1}명</p>
             <p className="text-xs text-blue-500">서울 5개</p>
           </div>
           <div className="p-4 bg-green-50 rounded-lg border border-green-200">
             <p className="text-sm text-green-600 mb-1">옵션 2</p>
-            <p className="text-xl font-bold text-green-900">{optionStats.option2}명</p>
+            <p className="text-xl font-bold text-green-900">{currentOptionStats.option2}명</p>
             <p className="text-xs text-green-500">경기/인천/지방 10개</p>
           </div>
           <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
             <p className="text-sm text-purple-600 mb-1">옵션 3</p>
-            <p className="text-xl font-bold text-purple-900">{optionStats.option3}명</p>
+            <p className="text-xl font-bold text-purple-900">{currentOptionStats.option3}명</p>
             <p className="text-xs text-purple-500">서울 3개 + 지방 2개</p>
           </div>
           <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
             <p className="text-sm text-gray-600 mb-1">미분류</p>
-            <p className="text-xl font-bold text-gray-900">{optionStats.unknown}명</p>
+            <p className="text-xl font-bold text-gray-900">{currentOptionStats.unknown}명</p>
             <p className="text-xs text-gray-500">이전 응답</p>
           </div>
         </div>

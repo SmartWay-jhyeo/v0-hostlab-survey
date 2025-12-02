@@ -72,16 +72,42 @@ export async function submitSurvey(data: {
 }) {
   const supabase = await getSupabaseServerClient()
 
-  const { error } = await supabase.from("region_demand_surveys").insert({
-    user_name: data.userName,
-    cohort: data.cohort,
-    selected_regions: data.selectedRegions,
-    option_type: data.optionType,
-  })
+  // 기존 사용자 확인
+  const { data: existingUser } = await supabase
+    .from("region_demand_surveys")
+    .select("id")
+    .eq("user_name", data.userName)
+    .eq("cohort", data.cohort)
+    .single()
 
-  if (error) {
-    console.error("Survey submission error:", error)
-    return { success: false, error: error.message }
+  if (existingUser) {
+    // 업데이트
+    const { error } = await supabase
+      .from("region_demand_surveys")
+      .update({
+        selected_regions: data.selectedRegions,
+        option_type: data.optionType,
+        // created_at은 업데이트하지 않음 (최초 생성 시간 유지)
+      })
+      .eq("id", existingUser.id)
+
+    if (error) {
+      console.error("Survey update error:", error)
+      return { success: false, error: error.message }
+    }
+  } else {
+    // 신규 생성
+    const { error } = await supabase.from("region_demand_surveys").insert({
+      user_name: data.userName,
+      cohort: data.cohort,
+      selected_regions: data.selectedRegions,
+      option_type: data.optionType,
+    })
+
+    if (error) {
+      console.error("Survey submission error:", error)
+      return { success: false, error: error.message }
+    }
   }
 
   revalidatePath("/admin")
