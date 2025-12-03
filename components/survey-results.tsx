@@ -47,7 +47,6 @@ export function SurveyResults() {
   const [serverRegions, setServerRegions] = useState<ServerRegionInfo[]>([])
   const [optionStats, setOptionStats] = useState({ option1: 0, option2: 0, option3: 0, unknown: 0 })
   const [loading, setLoading] = useState(true)
-  const [selectedRegions, setSelectedRegions] = useState<Set<string>>(new Set())
   const [sortOrder, setSortOrder] = useState<"name" | "date">("date")
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc")
   const [deleting, setDeleting] = useState(false)
@@ -135,24 +134,6 @@ export function SurveyResults() {
 
   const allRegions = Object.keys(regionCounts).sort()
 
-  const toggleRegion = (region: string) => {
-    const newSelected = new Set(selectedRegions)
-    if (newSelected.has(region)) {
-      newSelected.delete(region)
-    } else {
-      newSelected.add(region)
-    }
-    setSelectedRegions(newSelected)
-  }
-
-  const toggleAll = () => {
-    if (selectedRegions.size === allRegions.length) {
-      setSelectedRegions(new Set())
-    } else {
-      setSelectedRegions(new Set(allRegions))
-    }
-  }
-
   const sortedSurveys = [...surveys].sort((a, b) => {
     if (sortOrder === "name") {
       const compare = a.user_name.localeCompare(b.user_name, "ko")
@@ -174,7 +155,7 @@ export function SurveyResults() {
   }
 
   const downloadCSV = () => {
-    const regionsToExport = selectedRegions.size > 0 ? Array.from(selectedRegions) : allRegions
+    const regionsToExport = selectedForBulk.size > 0 ? Array.from(selectedForBulk) : currentTabRegions
 
     if (regionsToExport.length === 0) {
       alert("다운로드할 지역이 없습니다.")
@@ -205,7 +186,7 @@ export function SurveyResults() {
   }
 
   const handleDelete = async () => {
-    const regionsToDelete = selectedRegions.size > 0 ? Array.from(selectedRegions) : []
+    const regionsToDelete = selectedForBulk.size > 0 ? Array.from(selectedForBulk) : []
 
     if (regionsToDelete.length === 0) {
       alert("삭제할 지역을 선택해주세요.")
@@ -224,7 +205,7 @@ export function SurveyResults() {
 
       if (result.success) {
         alert(`${result.deletedCount}개의 설문이 수정/삭제되었습니다.`)
-        setSelectedRegions(new Set())
+        setSelectedForBulk(new Set())
         await fetchData()
       } else {
         alert(`삭제 중 오류가 발생했습니다: ${result.error}`)
@@ -478,12 +459,30 @@ export function SurveyResults() {
 
       {/* 크롤링 상태 관리 */}
       <div className="border border-gray-200 rounded-lg p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <CircleDot className="w-5 h-5 text-gray-700" />
-          <h2 className="text-lg font-semibold text-gray-900">크롤링 상태 관리</h2>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <CircleDot className="w-5 h-5 text-gray-700" />
+            <h2 className="text-lg font-semibold text-gray-900">크롤링 상태 관리</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={handleDelete}
+              variant="outline"
+              className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 bg-transparent"
+              disabled={selectedForBulk.size === 0 || deleting}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              {deleting ? "삭제 중..." : `삭제하기${selectedForBulk.size > 0 ? ` (${selectedForBulk.size}개)` : ""}`}
+            </Button>
+            <Button onClick={downloadCSV} className="bg-gray-900 hover:bg-gray-800 text-white">
+              <Download className="w-4 h-4 mr-2" />
+              CSV 다운로드
+              {selectedForBulk.size > 0 ? ` (${selectedForBulk.size}개)` : ` (${currentTabRegions.length}개)`}
+            </Button>
+          </div>
         </div>
         <p className="text-gray-500 text-sm mb-4">
-          크롤링이 완료된 지역을 관리합니다. 완료 처리된 지역은 완료 탭으로 이동합니다.
+          크롤링이 완료된 지역을 관리합니다. 선택 후 삭제하거나 CSV로 다운로드할 수 있습니다.
         </p>
 
         {allRegions.length === 0 ? (
@@ -625,94 +624,6 @@ export function SurveyResults() {
               )}
             </TabsContent>
           </Tabs>
-        )}
-      </div>
-
-      {/* 지역 선택 및 다운로드 */}
-      <div className="border border-gray-200 rounded-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">지역 선택 및 다운로드</h2>
-            <p className="text-gray-500 text-sm">
-              다운로드할 지역을 선택하세요. 선택하지 않으면 전체 지역이 다운로드됩니다.
-            </p>
-            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-              <span className="flex items-center gap-1">
-                <Database className="w-3 h-3 text-green-600" />
-                서버에 있는 지역
-              </span>
-              <span className="flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                마지막 업데이트 시간
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={handleDelete}
-              variant="outline"
-              className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700 bg-transparent"
-              disabled={selectedRegions.size === 0 || deleting}
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              {deleting ? "삭제 중..." : `삭제하기${selectedRegions.size > 0 ? ` (${selectedRegions.size}개)` : ""}`}
-            </Button>
-            <Button onClick={downloadCSV} className="bg-gray-900 hover:bg-gray-800 text-white">
-              <Download className="w-4 h-4 mr-2" />
-              CSV 다운로드
-              {selectedRegions.size > 0 && ` (${selectedRegions.size}개)`}
-            </Button>
-          </div>
-        </div>
-
-        {allRegions.length === 0 ? (
-          <p className="text-center text-gray-400 py-8">아직 데이터가 없습니다</p>
-        ) : (
-          <>
-            <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-200">
-              <Checkbox
-                id="select-all"
-                checked={selectedRegions.size === allRegions.length}
-                onCheckedChange={toggleAll}
-              />
-              <label htmlFor="select-all" className="text-sm font-medium text-gray-700 cursor-pointer">
-                전체 선택 ({allRegions.length}개)
-              </label>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-80 overflow-y-auto">
-              {allRegions.map((region) => {
-                const regionInfo = getRegionInfo(region)
-                const isInServer = isServerRegion(region)
-
-                return (
-                  <div
-                    key={region}
-                    className={`flex flex-col gap-1 p-3 rounded border cursor-pointer transition-colors ${
-                      selectedRegions.has(region)
-                        ? "border-gray-900 bg-gray-50"
-                        : isInServer
-                          ? "border-green-200 bg-green-50/50 hover:border-green-300"
-                          : "border-gray-200 hover:border-gray-300"
-                    }`}
-                    onClick={() => toggleRegion(region)}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Checkbox checked={selectedRegions.has(region)} onCheckedChange={() => toggleRegion(region)} />
-                      <span className="text-sm text-gray-700 truncate flex-1">{region}</span>
-                      <span className="text-xs text-gray-400">{regionCounts[region]}표</span>
-                    </div>
-                    {isInServer && regionInfo && (
-                      <div className="flex items-center gap-1 ml-6 text-xs text-green-600">
-                        <Database className="w-3 h-3" />
-                        <span>서버 지역</span>
-                        <span className="text-gray-400 ml-1">· {formatLastCrawled(regionInfo.last_crawled_at)}</span>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </>
         )}
       </div>
 
