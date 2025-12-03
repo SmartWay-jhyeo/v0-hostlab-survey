@@ -364,3 +364,119 @@ export async function updateSurveyRegions(
   revalidatePath("/admin")
   return { success: true }
 }
+
+// 크롤링 상태 관련 타입 및 함수
+export type CrawledRegion = {
+  id: string
+  region_name: string
+  is_crawled: boolean
+  crawled_at: string | null
+  created_at: string
+}
+
+export async function getCrawledRegions(): Promise<CrawledRegion[]> {
+  const supabase = await getSupabaseServerClient()
+
+  const { data, error } = await supabase
+    .from("crawled_regions")
+    .select("*")
+    .order("region_name")
+
+  if (error) {
+    console.error("Fetch crawled regions error:", error)
+    return []
+  }
+
+  return data || []
+}
+
+export async function toggleRegionCrawlStatus(
+  regionName: string,
+): Promise<{ success: boolean; isCrawled: boolean; error?: string }> {
+  const supabase = await getSupabaseServerClient()
+
+  // 기존 레코드 확인
+  const { data: existing } = await supabase
+    .from("crawled_regions")
+    .select("id, is_crawled")
+    .eq("region_name", regionName)
+    .single()
+
+  if (existing) {
+    // 기존 레코드가 있으면 상태 토글
+    const newStatus = !existing.is_crawled
+    const { error } = await supabase
+      .from("crawled_regions")
+      .update({
+        is_crawled: newStatus,
+        crawled_at: newStatus ? new Date().toISOString() : null,
+      })
+      .eq("id", existing.id)
+
+    if (error) {
+      console.error("Toggle crawl status error:", error)
+      return { success: false, isCrawled: existing.is_crawled, error: error.message }
+    }
+
+    revalidatePath("/admin")
+    return { success: true, isCrawled: newStatus }
+  } else {
+    // 새 레코드 생성 (완료 상태로)
+    const { error } = await supabase.from("crawled_regions").insert({
+      region_name: regionName,
+      is_crawled: true,
+      crawled_at: new Date().toISOString(),
+    })
+
+    if (error) {
+      console.error("Insert crawled region error:", error)
+      return { success: false, isCrawled: false, error: error.message }
+    }
+
+    revalidatePath("/admin")
+    return { success: true, isCrawled: true }
+  }
+}
+
+export async function bulkUpdateCrawlStatus(
+  regionNames: string[],
+  isCrawled: boolean,
+): Promise<{ success: boolean; updatedCount: number; error?: string }> {
+  const supabase = await getSupabaseServerClient()
+
+  let updatedCount = 0
+
+  for (const regionName of regionNames) {
+    // 기존 레코드 확인
+    const { data: existing } = await supabase
+      .from("crawled_regions")
+      .select("id")
+      .eq("region_name", regionName)
+      .single()
+
+    if (existing) {
+      // 기존 레코드 업데이트
+      const { error } = await supabase
+        .from("crawled_regions")
+        .update({
+          is_crawled: isCrawled,
+          crawled_at: isCrawled ? new Date().toISOString() : null,
+        })
+        .eq("id", existing.id)
+
+      if (!error) updatedCount++
+    } else {
+      // 새 레코드 생성
+      const { error } = await supabase.from("crawled_regions").insert({
+        region_name: regionName,
+        is_crawled: isCrawled,
+        crawled_at: isCrawled ? new Date().toISOString() : null,
+      })
+
+      if (!error) updatedCount++
+    }
+  }
+
+  revalidatePath("/admin")
+  return { success: true, updatedCount }
+}

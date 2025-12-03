@@ -9,8 +9,12 @@ import {
   getOptionStats,
   deleteSurveyById,
   updateSurveyRegions,
+  getCrawledRegions,
+  toggleRegionCrawlStatus,
+  bulkUpdateCrawlStatus,
   type SurveyResponse,
   type ServerRegionInfo,
+  type CrawledRegion,
 } from "@/lib/actions/survey"
 import {
   Users,
@@ -25,9 +29,12 @@ import {
   PieChart,
   Pencil,
   X,
+  Check,
+  CircleDot,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 const OPTION_NAMES: Record<number, string> = {
   1: "서울 5개",
@@ -50,16 +57,31 @@ export function SurveyResults() {
   const [editingRegions, setEditingRegions] = useState<string[]>([])
   const [isUpdating, setIsUpdating] = useState(false)
 
+  // 크롤링 상태 관련 state
+  const [crawledRegionsMap, setCrawledRegionsMap] = useState<Map<string, boolean>>(new Map())
+  const [activeTab, setActiveTab] = useState<"pending" | "completed">("pending")
+  const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set())
+  const [isUpdatingCrawl, setIsUpdatingCrawl] = useState(false)
+
   const fetchData = async () => {
     setLoading(true)
-    const [surveyData, regionsData, statsData] = await Promise.all([
+    const [surveyData, regionsData, statsData, crawlData] = await Promise.all([
       getSurveyResults(),
       getAllServerRegions(),
       getOptionStats(),
+      getCrawledRegions(),
     ])
     setSurveys(surveyData)
     setServerRegions(regionsData)
     setOptionStats(statsData)
+
+    // 크롤링 상태 Map 생성
+    const crawlMap = new Map<string, boolean>()
+    crawlData.forEach((item: CrawledRegion) => {
+      crawlMap.set(item.region_name, item.is_crawled)
+    })
+    setCrawledRegionsMap(crawlMap)
+
     setLoading(false)
   }
 
@@ -294,6 +316,77 @@ export function SurveyResults() {
     return date.toLocaleDateString("ko-KR")
   }
 
+  // 크롤링 완료/미완료 지역 분류
+  const completedRegions = allRegions.filter((r) => crawledRegionsMap.get(r) === true)
+  const pendingRegions = allRegions.filter((r) => crawledRegionsMap.get(r) !== true)
+
+  // 현재 탭의 지역 목록
+  const currentTabRegions = activeTab === "completed" ? completedRegions : pendingRegions
+
+  // 일괄 선택 토글
+  const toggleBulkRegion = (region: string) => {
+    const newSelected = new Set(selectedForBulk)
+    if (newSelected.has(region)) {
+      newSelected.delete(region)
+    } else {
+      newSelected.add(region)
+    }
+    setSelectedForBulk(newSelected)
+  }
+
+  const toggleAllBulk = () => {
+    if (selectedForBulk.size === currentTabRegions.length) {
+      setSelectedForBulk(new Set())
+    } else {
+      setSelectedForBulk(new Set(currentTabRegions))
+    }
+  }
+
+  // 단일 지역 크롤링 상태 토글
+  const handleToggleCrawlStatus = async (region: string) => {
+    setIsUpdatingCrawl(true)
+    try {
+      const result = await toggleRegionCrawlStatus(region)
+      if (result.success) {
+        // 로컬 상태 업데이트
+        const newMap = new Map(crawledRegionsMap)
+        newMap.set(region, result.isCrawled)
+        setCrawledRegionsMap(newMap)
+        setSelectedForBulk(new Set()) // 선택 초기화
+      }
+    } catch (error) {
+      alert("상태 변경 중 오류가 발생했습니다.")
+    } finally {
+      setIsUpdatingCrawl(false)
+    }
+  }
+
+  // 일괄 크롤링 상태 변경
+  const handleBulkUpdateCrawlStatus = async (isCrawled: boolean) => {
+    if (selectedForBulk.size === 0) {
+      alert("지역을 선택해주세요.")
+      return
+    }
+
+    setIsUpdatingCrawl(true)
+    try {
+      const result = await bulkUpdateCrawlStatus(Array.from(selectedForBulk), isCrawled)
+      if (result.success) {
+        // 로컬 상태 업데이트
+        const newMap = new Map(crawledRegionsMap)
+        selectedForBulk.forEach((region) => {
+          newMap.set(region, isCrawled)
+        })
+        setCrawledRegionsMap(newMap)
+        setSelectedForBulk(new Set())
+      }
+    } catch (error) {
+      alert("일괄 상태 변경 중 오류가 발생했습니다.")
+    } finally {
+      setIsUpdatingCrawl(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -381,6 +474,158 @@ export function SurveyResults() {
             <p className="text-xs text-gray-500">이전 응답</p>
           </div>
         </div>
+      </div>
+
+      {/* 크롤링 상태 관리 */}
+      <div className="border border-gray-200 rounded-lg p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <CircleDot className="w-5 h-5 text-gray-700" />
+          <h2 className="text-lg font-semibold text-gray-900">크롤링 상태 관리</h2>
+        </div>
+        <p className="text-gray-500 text-sm mb-4">
+          크롤링이 완료된 지역을 관리합니다. 완료 처리된 지역은 완료 탭으로 이동합니다.
+        </p>
+
+        {allRegions.length === 0 ? (
+          <p className="text-center text-gray-400 py-8">아직 데이터가 없습니다</p>
+        ) : (
+          <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as "pending" | "completed"); setSelectedForBulk(new Set()) }}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="pending" className="flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                미완료 ({pendingRegions.length}개)
+              </TabsTrigger>
+              <TabsTrigger value="completed" className="flex items-center gap-2">
+                <Check className="w-4 h-4" />
+                완료 ({completedRegions.length}개)
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="pending">
+              {pendingRegions.length === 0 ? (
+                <p className="text-center text-gray-400 py-8">모든 지역이 완료 처리되었습니다</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="select-all-bulk-pending"
+                        checked={selectedForBulk.size === pendingRegions.length && pendingRegions.length > 0}
+                        onCheckedChange={toggleAllBulk}
+                      />
+                      <label htmlFor="select-all-bulk-pending" className="text-sm font-medium text-gray-700 cursor-pointer">
+                        전체 선택 ({pendingRegions.length}개)
+                      </label>
+                    </div>
+                    <Button
+                      onClick={() => handleBulkUpdateCrawlStatus(true)}
+                      disabled={selectedForBulk.size === 0 || isUpdatingCrawl}
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      <Check className="w-4 h-4 mr-2" />
+                      {isUpdatingCrawl ? "처리 중..." : `선택 완료 처리 (${selectedForBulk.size}개)`}
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-80 overflow-y-auto">
+                    {pendingRegions.map((region) => {
+                      const isInServer = isServerRegion(region)
+                      return (
+                        <div
+                          key={region}
+                          className={`flex items-center justify-between p-3 rounded border cursor-pointer transition-colors ${
+                            selectedForBulk.has(region)
+                              ? "border-gray-900 bg-gray-50"
+                              : isInServer
+                                ? "border-green-200 bg-green-50/50 hover:border-green-300"
+                                : "border-gray-200 hover:border-gray-300"
+                          }`}
+                          onClick={() => toggleBulkRegion(region)}
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <Checkbox checked={selectedForBulk.has(region)} onCheckedChange={() => toggleBulkRegion(region)} />
+                            <span className="text-sm text-gray-700 truncate">{region}</span>
+                            <span className="text-xs text-gray-400">{regionCounts[region]}표</span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-green-600 hover:text-green-700 hover:bg-green-50"
+                            onClick={(e) => { e.stopPropagation(); handleToggleCrawlStatus(region) }}
+                            disabled={isUpdatingCrawl}
+                          >
+                            <Check className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </TabsContent>
+
+            <TabsContent value="completed">
+              {completedRegions.length === 0 ? (
+                <p className="text-center text-gray-400 py-8">완료된 지역이 없습니다</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="select-all-bulk-completed"
+                        checked={selectedForBulk.size === completedRegions.length && completedRegions.length > 0}
+                        onCheckedChange={toggleAllBulk}
+                      />
+                      <label htmlFor="select-all-bulk-completed" className="text-sm font-medium text-gray-700 cursor-pointer">
+                        전체 선택 ({completedRegions.length}개)
+                      </label>
+                    </div>
+                    <Button
+                      onClick={() => handleBulkUpdateCrawlStatus(false)}
+                      disabled={selectedForBulk.size === 0 || isUpdatingCrawl}
+                      variant="outline"
+                      className="border-orange-300 text-orange-600 hover:bg-orange-50 hover:text-orange-700 bg-transparent"
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      {isUpdatingCrawl ? "처리 중..." : `선택 미완료 처리 (${selectedForBulk.size}개)`}
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-80 overflow-y-auto">
+                    {completedRegions.map((region) => {
+                      const isInServer = isServerRegion(region)
+                      return (
+                        <div
+                          key={region}
+                          className={`flex items-center justify-between p-3 rounded border cursor-pointer transition-colors ${
+                            selectedForBulk.has(region)
+                              ? "border-gray-900 bg-gray-50"
+                              : "border-green-300 bg-green-50 hover:border-green-400"
+                          }`}
+                          onClick={() => toggleBulkRegion(region)}
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <Checkbox checked={selectedForBulk.has(region)} onCheckedChange={() => toggleBulkRegion(region)} />
+                            <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                            <span className="text-sm text-gray-700 truncate">{region}</span>
+                            <span className="text-xs text-gray-400">{regionCounts[region]}표</span>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                            onClick={(e) => { e.stopPropagation(); handleToggleCrawlStatus(region) }}
+                            disabled={isUpdatingCrawl}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
 
       {/* 지역 선택 및 다운로드 */}
