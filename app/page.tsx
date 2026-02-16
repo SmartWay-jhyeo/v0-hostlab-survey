@@ -1,4 +1,4 @@
-import { SurveyForm } from "@/components/survey-form"
+import { SurveyForm } from "@/components/survey"
 import Link from "next/link"
 import { Settings } from "lucide-react"
 

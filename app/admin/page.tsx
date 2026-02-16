@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { SurveyResults } from "@/components/survey-results"
+import { AdminDashboard } from "@/components/admin"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -72,7 +72,7 @@ export default function AdminPage() {
               <h1 className="text-2xl font-bold text-gray-900 mb-2">수요조사 결과</h1>
               <p className="text-gray-500">제출된 수요조사 응답을 확인합니다.</p>
             </div>
-            <SurveyResults />
+            <AdminDashboard />
           </>
         )}
       </div>
