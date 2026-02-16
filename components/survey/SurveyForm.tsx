@@ -22,6 +22,7 @@ export function SurveyForm() {
   const [submitted, setSubmitted] = useState(false)
   const [showExistingModal, setShowExistingModal] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [privacyAgreed, setPrivacyAgreed] = useState(false)
 
   const {
     name,
@@ -145,7 +146,7 @@ export function SurveyForm() {
     return <SubmissionSuccess onReset={handleReset} />
   }
 
-  const isValid = name && cohort && selectedOption && selectedRegions.length > 0
+  const isValid = name && cohort && selectedOption && selectedRegions.length > 0 && privacyAgreed
 
   return (
     <div className="space-y-8">
@@ -219,6 +220,22 @@ export function SurveyForm() {
           )}
         </>
       )}
+
+      {/* 개인정보 동의 */}
+      <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={privacyAgreed}
+            onChange={(e) => setPrivacyAgreed(e.target.checked)}
+            className="mt-1 w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
+          />
+          <span className="text-sm text-gray-600">
+            입력하신 이름과 선택 지역은 수요조사 목적으로만 사용되며, 조사 완료 후 삭제됩니다.
+            <span className="text-red-500 ml-1">*</span>
+          </span>
+        </label>
+      </div>
 
       <Button
         className="w-full bg-gray-900 hover:bg-gray-800 text-white h-12 text-base"
