@@ -17,5 +17,9 @@ export async function getSupabaseServerClient() {
         }
       },
     },
+    global: {
+      fetch: (url: RequestInfo | URL, options: RequestInit = {}) =>
+        fetch(url, { ...options, cache: "no-store" }),
+    },
   })
 }

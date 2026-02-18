@@ -1,7 +1,7 @@
 "use server"
 
 import { getSupabaseServerClient } from "@/lib/supabase/server"
-import { revalidatePath } from "next/cache"
+import { revalidatePath, unstable_noStore as noStore } from "next/cache"
 
 // Types - re-export from lib/types
 export type {
@@ -93,6 +93,7 @@ export async function submitSurvey(data: {
 }
 
 export async function getSurveyResults(): Promise<SurveyResponse[]> {
+  noStore()
   const supabase = await getSupabaseServerClient()
 
   const { data, error } = await supabase
@@ -212,14 +213,19 @@ export async function deleteSurveyById(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await getSupabaseServerClient()
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("region_demand_surveys")
     .delete()
     .eq("id", id)
+    .select()
 
   if (error) {
     console.error("Delete survey by id error:", error)
     return { success: false, error: error.message }
+  }
+
+  if (!data || data.length === 0) {
+    return { success: false, error: "삭제할 레코드를 찾을 수 없습니다." }
   }
 
   revalidatePath("/admin")
@@ -336,6 +342,7 @@ export async function getAllServerRegions(): Promise<ServerRegionInfo[]> {
 // ============================================
 
 export async function getCrawledRegions(): Promise<CrawledRegion[]> {
+  noStore()
   const supabase = await getSupabaseServerClient()
 
   const { data, error } = await supabase
