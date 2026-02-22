@@ -7,21 +7,29 @@ import { AdminDashboard } from "@/components/admin"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-
-const ADMIN_PASSWORD = "hostlab2025"
+import { verifyAdminPassword } from "@/lib/actions/survey"
 
 export default function AdminPage() {
   const [password, setPassword] = useState("")
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [error, setError] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (password === ADMIN_PASSWORD) {
-      setIsAuthenticated(true)
-      setError("")
-    } else {
-      setError("비밀번호가 올바르지 않습니다.")
+    setIsLoading(true)
+    try {
+      const isValid = await verifyAdminPassword(password)
+      if (isValid) {
+        setIsAuthenticated(true)
+        setError("")
+      } else {
+        setError("비밀번호가 올바르지 않습니다.")
+      }
+    } catch {
+      setError("인증 중 오류가 발생했습니다.")
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -60,8 +68,8 @@ export default function AdminPage() {
                   />
                   {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
                 </div>
-                <Button type="submit" className="w-full bg-gray-900 hover:bg-gray-800 text-white">
-                  로그인
+                <Button type="submit" className="w-full bg-gray-900 hover:bg-gray-800 text-white" disabled={isLoading}>
+                  {isLoading ? "확인 중..." : "로그인"}
                 </Button>
               </form>
             </div>

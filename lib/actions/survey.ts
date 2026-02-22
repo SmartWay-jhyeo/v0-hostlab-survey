@@ -18,6 +18,15 @@ export type {
 import type { SurveyResponse, City, District, Neighborhood, ServerRegionInfo, CrawledRegion } from "@/lib/types"
 
 // ============================================
+// 관리자 비밀번호 검증
+// ============================================
+export async function verifyAdminPassword(password: string): Promise<boolean> {
+  const adminPassword = process.env.ADMIN_PASSWORD
+  if (!adminPassword) return false
+  return password === adminPassword
+}
+
+// ============================================
 // Survey CRUD functions
 // ============================================
 

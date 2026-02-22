@@ -42,7 +42,7 @@ lib/
 
 ## 관리자 비밀번호
 
-`hostlab2025` (클라이언트 코드에 하드코딩됨)
+환경변수 `ADMIN_PASSWORD`로 관리 (Vercel 환경변수, 로컬은 `.env.local`)
 
 ## 배포
 
