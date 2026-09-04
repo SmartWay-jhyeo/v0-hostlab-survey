@@ -13,6 +13,9 @@ export default function Home() {
           </Link>
           <nav className="flex items-center gap-6 text-sm text-gray-600">
             <span className="text-gray-900 font-medium">지역 수요조사</span>
+            <Link href="/stats" className="text-gray-500 hover:text-gray-900 transition-colors">
+              통계
+            </Link>
             <Link href="/admin" className="flex items-center gap-1 text-gray-500 hover:text-gray-900 transition-colors">
               <Settings className="w-4 h-4" />
               <span>관리자</span>
