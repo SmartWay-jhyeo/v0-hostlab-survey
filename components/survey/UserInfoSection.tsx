@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-const COHORTS = ["1기", "2기", "3기", "4기", "5기", "6기", "7기"]
+const COHORTS = ["1기", "2기", "3기", "4기", "5기", "6기", "7기", "티나1기"]
 
 interface UserInfoSectionProps {
   name: string
