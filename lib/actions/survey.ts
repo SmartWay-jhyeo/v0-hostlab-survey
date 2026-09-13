@@ -354,9 +354,11 @@ export async function getCrawledRegions(): Promise<CrawledRegion[]> {
   noStore()
   const supabase = await getSupabaseServerClient()
 
+  // cohort 가 없는 행은 기수 도입 이전 레거시 기록이므로 제외
   const { data, error } = await supabase
     .from("crawled_regions")
     .select("*")
+    .not("cohort", "is", null)
     .order("region_name")
 
   if (error) {
@@ -367,85 +369,69 @@ export async function getCrawledRegions(): Promise<CrawledRegion[]> {
   return data || []
 }
 
+async function upsertCrawlStatus(
+  supabase: Awaited<ReturnType<typeof getSupabaseServerClient>>,
+  regionName: string,
+  cohort: string,
+  isCrawled: boolean
+): Promise<{ error: string | null }> {
+  const { data: existing } = await supabase
+    .from("crawled_regions")
+    .select("id")
+    .eq("region_name", regionName)
+    .eq("cohort", cohort)
+    .maybeSingle()
+
+  const payload = {
+    is_crawled: isCrawled,
+    crawled_at: isCrawled ? new Date().toISOString() : null,
+  }
+
+  const { error } = existing
+    ? await supabase.from("crawled_regions").update(payload).eq("id", existing.id)
+    : await supabase.from("crawled_regions").insert({ region_name: regionName, cohort, ...payload })
+
+  return { error: error ? error.message : null }
+}
+
 export async function toggleRegionCrawlStatus(
-  regionName: string
+  regionName: string,
+  cohort: string
 ): Promise<{ success: boolean; isCrawled: boolean; error?: string }> {
   const supabase = await getSupabaseServerClient()
 
   const { data: existing } = await supabase
     .from("crawled_regions")
-    .select("id, is_crawled")
+    .select("is_crawled")
     .eq("region_name", regionName)
-    .single()
+    .eq("cohort", cohort)
+    .maybeSingle()
 
-  if (existing) {
-    const newStatus = !existing.is_crawled
-    const { error } = await supabase
-      .from("crawled_regions")
-      .update({
-        is_crawled: newStatus,
-        crawled_at: newStatus ? new Date().toISOString() : null,
-      })
-      .eq("id", existing.id)
+  const current = existing?.is_crawled ?? false
+  const newStatus = !current
+  const { error } = await upsertCrawlStatus(supabase, regionName, cohort, newStatus)
 
-    if (error) {
-      console.error("Toggle crawl status error:", error)
-      return { success: false, isCrawled: existing.is_crawled, error: error.message }
-    }
-
-    revalidatePath("/admin")
-    return { success: true, isCrawled: newStatus }
-  } else {
-    const { error } = await supabase.from("crawled_regions").insert({
-      region_name: regionName,
-      is_crawled: true,
-      crawled_at: new Date().toISOString(),
-    })
-
-    if (error) {
-      console.error("Insert crawled region error:", error)
-      return { success: false, isCrawled: false, error: error.message }
-    }
-
-    revalidatePath("/admin")
-    return { success: true, isCrawled: true }
+  if (error) {
+    console.error("Toggle crawl status error:", error)
+    return { success: false, isCrawled: current, error }
   }
+
+  revalidatePath("/admin")
+  return { success: true, isCrawled: newStatus }
 }
 
 export async function bulkUpdateCrawlStatus(
   regionNames: string[],
-  isCrawled: boolean
+  isCrawled: boolean,
+  cohort: string
 ): Promise<{ success: boolean; updatedCount: number; error?: string }> {
   const supabase = await getSupabaseServerClient()
 
   let updatedCount = 0
-
   for (const regionName of regionNames) {
-    const { data: existing } = await supabase
-      .from("crawled_regions")
-      .select("id")
-      .eq("region_name", regionName)
-      .single()
-
-    if (existing) {
-      const { error } = await supabase
-        .from("crawled_regions")
-        .update({
-          is_crawled: isCrawled,
-          crawled_at: isCrawled ? new Date().toISOString() : null,
-        })
-        .eq("id", existing.id)
-
-      if (!error) updatedCount++
-    } else {
-      const { error } = await supabase.from("crawled_regions").insert({
-        region_name: regionName,
-        is_crawled: isCrawled,
-        crawled_at: isCrawled ? new Date().toISOString() : null,
-      })
-
-      if (!error) updatedCount++
-    }
+    const { error } = await upsertCrawlStatus(supabase, regionName, cohort, isCrawled)
+    if (!error) updatedCount++
+    else console.error("Bulk crawl status error:", regionName, error)
   }
 
   revalidatePath("/admin")

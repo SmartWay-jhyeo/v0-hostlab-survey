@@ -1,15 +1,26 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { CircleDot, Trash2, Download, Clock, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { RegionList } from "./RegionList"
 import { useBulkSelection, useCrawlingStatus } from "../hooks"
-import type { ServerRegionInfo } from "@/lib/types"
+import { crawlStatusKey } from "@/lib/region-utils"
+import type { ServerRegionInfo, SurveyResponse } from "@/lib/types"
 
 interface CrawlingStatusManagerProps {
-  regionCounts: Record<string, number>
+  /** 중복 제거된 활성 기수 응답 (이름+기수 기준) */
+  uniqueSurveys: SurveyResponse[]
+  activeCohorts: string[]
+  /** key = `${cohort}::${region}` */
   crawledRegions: Map<string, boolean>
   setCrawledRegions: React.Dispatch<React.SetStateAction<Map<string, boolean>>>
   serverRegions: Map<string, ServerRegionInfo>
@@ -17,15 +28,22 @@ interface CrawlingStatusManagerProps {
 }
 
 export function CrawlingStatusManager({
-  regionCounts,
+  uniqueSurveys,
+  activeCohorts,
   crawledRegions,
   setCrawledRegions,
   serverRegions,
   onRefresh,
 }: CrawlingStatusManagerProps) {
   const [activeTab, setActiveTab] = useState<"pending" | "completed">("pending")
+  const [cohort, setCohort] = useState<string>(activeCohorts[0] ?? "")
 
-  const { selected, toggle, toggleAll, clear, isAllSelected } = useBulkSelection<string>()
+  // 기수 목록이 바뀌면(마무리 등) 선택값 보정
+  useEffect(() => {
+    if (!activeCohorts.includes(cohort)) setCohort(activeCohorts[0] ?? "")
+  }, [activeCohorts, cohort])
+
+  const { selected, toggle, toggleAll, clear } = useBulkSelection<string>()
 
   const {
     isUpdating,
@@ -35,19 +53,39 @@ export function CrawlingStatusManager({
     handleDelete,
     downloadCSV,
   } = useCrawlingStatus({
+    cohort,
     onRefresh,
     clearSelection: clear,
     crawledRegions,
     setCrawledRegions,
   })
 
+  // 선택한 기수의 지역별 표 수
+  const regionCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    uniqueSurveys
+      .filter((s) => s.cohort === cohort)
+      .forEach((s) => {
+        s.selected_regions.forEach((region) => {
+          counts[region] = (counts[region] || 0) + 1
+        })
+      })
+    return counts
+  }, [uniqueSurveys, cohort])
+
   const allRegions = Object.keys(regionCounts).sort()
-  const pendingRegions = allRegions.filter((r) => crawledRegions.get(r) !== true)
-  const completedRegions = allRegions.filter((r) => crawledRegions.get(r) === true)
+  const isCrawled = (r: string) => crawledRegions.get(crawlStatusKey(cohort, r)) === true
+  const pendingRegions = allRegions.filter((r) => !isCrawled(r))
+  const completedRegions = allRegions.filter(isCrawled)
   const currentTabRegions = activeTab === "pending" ? pendingRegions : completedRegions
 
   const handleTabChange = (value: string) => {
     setActiveTab(value as "pending" | "completed")
+    clear()
+  }
+
+  const handleCohortChange = (value: string) => {
+    setCohort(value)
     clear()
   }
 
@@ -83,8 +121,26 @@ export function CrawlingStatusManager({
         </div>
       </div>
       <p className="text-gray-500 text-sm mb-4">
-        크롤링이 완료된 지역을 관리합니다. 선택 후 삭제하거나 CSV로 다운로드할 수 있습니다.
+        크롤링 완료 여부는 기수별로 관리됩니다. 기수를 선택한 뒤 완료/미완료 처리, 삭제, CSV 다운로드를 할 수 있습니다.
       </p>
+
+      {activeCohorts.length > 0 && (
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-sm text-gray-600">기수:</span>
+          <Select value={cohort} onValueChange={handleCohortChange}>
+            <SelectTrigger className="w-32">
+              <SelectValue placeholder="기수 선택" />
+            </SelectTrigger>
+            <SelectContent>
+              {activeCohorts.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {allRegions.length === 0 ? (
         <p className="text-center text-gray-400 py-8">아직 데이터가 없습니다</p>

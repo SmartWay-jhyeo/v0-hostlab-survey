@@ -145,7 +145,8 @@ export function AdminDashboard() {
 
           {/* Crawling Status Manager */}
           <CrawlingStatusManager
-            regionCounts={regionCounts}
+            uniqueSurveys={uniqueSurveys}
+            activeCohorts={activeCohorts}
             crawledRegions={crawledRegions}
             setCrawledRegions={setCrawledRegions}
             serverRegions={serverRegions}

@@ -8,6 +8,7 @@ import {
   getArchivedCohorts,
 } from "@/lib/actions/survey"
 import type { SurveyResponse, ServerRegionInfo, CrawledRegion } from "@/lib/types"
+import { crawlStatusKey } from "@/lib/region-utils"
 
 export function useSurveyData() {
   const [surveys, setSurveys] = useState<SurveyResponse[]>([])
@@ -34,9 +35,11 @@ export function useSurveyData() {
     })
     setServerRegions(regionMap)
 
+    // 기수별 완료 상태: key = `${cohort}::${region_name}`
     const crawlMap = new Map<string, boolean>()
     crawlData.forEach((item: CrawledRegion) => {
-      crawlMap.set(item.region_name, item.is_crawled)
+      if (!item.cohort) return
+      crawlMap.set(crawlStatusKey(item.cohort, item.region_name), item.is_crawled)
     })
     setCrawledRegions(crawlMap)
 

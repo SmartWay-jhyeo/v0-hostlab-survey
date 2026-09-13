@@ -6,8 +6,10 @@ import {
   bulkUpdateCrawlStatus,
   deleteSurveysByRegions,
 } from "@/lib/actions/survey"
+import { crawlStatusKey } from "@/lib/region-utils"
 
 interface UseCrawlingStatusOptions {
+  cohort: string
   onRefresh: () => void
   clearSelection: () => void
   crawledRegions: Map<string, boolean>
@@ -15,6 +17,7 @@ interface UseCrawlingStatusOptions {
 }
 
 export function useCrawlingStatus({
+  cohort,
   onRefresh,
   clearSelection,
   crawledRegions,
@@ -27,10 +30,10 @@ export function useCrawlingStatus({
     async (region: string) => {
       setIsUpdating(true)
       try {
-        const result = await toggleRegionCrawlStatus(region)
+        const result = await toggleRegionCrawlStatus(region, cohort)
         if (result.success) {
           const newMap = new Map(crawledRegions)
-          newMap.set(region, result.isCrawled)
+          newMap.set(crawlStatusKey(cohort, region), result.isCrawled)
           setCrawledRegions(newMap)
           clearSelection()
         }
@@ -40,7 +43,7 @@ export function useCrawlingStatus({
         setIsUpdating(false)
       }
     },
-    [crawledRegions, setCrawledRegions, clearSelection]
+    [cohort, crawledRegions, setCrawledRegions, clearSelection]
   )
 
   const handleBulkUpdate = useCallback(
@@ -52,11 +55,11 @@ export function useCrawlingStatus({
 
       setIsUpdating(true)
       try {
-        const result = await bulkUpdateCrawlStatus(regions, isCrawled)
+        const result = await bulkUpdateCrawlStatus(regions, isCrawled, cohort)
         if (result.success) {
           const newMap = new Map(crawledRegions)
           regions.forEach((region) => {
-            newMap.set(region, isCrawled)
+            newMap.set(crawlStatusKey(cohort, region), isCrawled)
           })
           setCrawledRegions(newMap)
           clearSelection()
@@ -67,7 +70,7 @@ export function useCrawlingStatus({
         setIsUpdating(false)
       }
     },
-    [crawledRegions, setCrawledRegions, clearSelection]
+    [cohort, crawledRegions, setCrawledRegions, clearSelection]
   )
 
   const handleDelete = useCallback(

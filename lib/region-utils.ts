@@ -44,3 +44,8 @@ export function validateRegionsByOption(
 
   return { valid: true }
 }
+
+/** 기수별 크롤링 완료 상태 Map 의 키 */
+export function crawlStatusKey(cohort: string, regionName: string): string {
+  return `${cohort}::${regionName}`
+}
